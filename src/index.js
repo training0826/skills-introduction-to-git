@@ -2,7 +2,6 @@
 const COLS = 10;
 const ROWS = 20;
 const BLOCK_SIZE = 30;
-const PATTERN_SIZE = 5;
 
 // Colors for blocks (dev-themed)
 const COLORS = {
@@ -14,39 +13,62 @@ const COLORS = {
   5: "#dcdcaa", // Variable yellow
   6: "#569cd6", // Keyword blue
   7: "#b5cea8", // Number green
-  8: "#000000", // Void (black)
+  8: "#ffffff", // White block
 };
 
-// Tetromino shapes (simplified for easier pattern matching)
+// Tetromino shapes
 const SHAPES = [
   [[1]], // Single block
   [[2, 2]], // Horizontal pair
   [[3], [3]], // Vertical pair
   [
+    [6, 0],
+    [6, 0],
+    [6, 6],
+  ], // L shape
+  [
+    [0, 7],
+    [0, 7],
+    [7, 7],
+  ], // Mirrored L shape
+  [
     [4, 4],
     [4, 4],
   ], // 2x2 square
   [[5, 5, 5]], // Horizontal line of 3
-  [[8]], // Void block (black)
-  [[8, 8]], // Void pair
+  [[6, 6, 6, 6]], // I tetromino
+  [
+    [0, 1, 0],
+    [1, 1, 1],
+  ], // T tetromino
+  [
+    [0, 2, 2],
+    [2, 2, 0],
+  ], // S tetromino
+  [
+    [3, 3, 0],
+    [0, 3, 3],
+  ], // Z tetromino
+  [[8]], // White block
+  [[8, 8]], // White pair
 ];
 
 // Game state
 let canvas, ctx, patternCanvas, patternCtx;
 let board = [];
 let currentPiece = null;
+let nextPiece = null;
 let currentX = 0;
 let currentY = 0;
 let score = 0;
 let gameOver = false;
 let highScore = 0;
 let level = 1;
-let patternsCleared = 0;
+let totalLinesCleared = 0;
 let isPaused = false;
 let dropCounter = 0;
 let dropInterval = 1000;
 let lastTime = 0;
-let targetPattern = null;
 
 // Initialize game
 function init() {
@@ -60,8 +82,8 @@ function init() {
     .fill(null)
     .map(() => Array(COLS).fill(0));
 
-  // Set initial target pattern
-  setNewTargetPattern();
+  nextPiece = createRandomPiece();
+  drawNextPiecePreview();
 
   // Spawn first piece
   spawnPiece();
@@ -71,6 +93,11 @@ function init() {
 
   // Add keyboard controls
   document.addEventListener("keydown", handleKeyPress);
+}
+
+function createRandomPiece() {
+  const randomShape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+  return randomShape.map((row) => [...row]);
 }
 
 // Game loop
@@ -148,8 +175,9 @@ function drawPiece(context, piece, offsetX, offsetY) {
 
 // Spawn new piece
 function spawnPiece() {
-  const randomShape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
-  currentPiece = randomShape.map((row) => [...row]);
+  currentPiece = nextPiece || createRandomPiece();
+  nextPiece = createRandomPiece();
+  drawNextPiecePreview();
   currentX = Math.floor(COLS / 2) - Math.floor(currentPiece[0].length / 2);
   currentY = 0;
 
@@ -185,7 +213,7 @@ function moveDown() {
     currentY++;
   } else {
     lockPiece();
-    checkPatternMatch();
+    clearCompletedLines();
     spawnPiece();
   }
 }
@@ -234,81 +262,65 @@ function hardDrop() {
     currentY++;
   }
   lockPiece();
-  checkPatternMatch();
+  clearCompletedLines();
   spawnPiece();
 }
 
-// Set new target pattern
-function setNewTargetPattern() {
-  targetPattern = ERROR_PATTERNS[Math.floor(Math.random() * ERROR_PATTERNS.length)];
-  drawTargetPattern();
-  document.getElementById("patternName").textContent = targetPattern.name;
+// Clear any completed rows and collapse the board downward
+function clearCompletedLines() {
+  let clearedLines = 0;
+
+  for (let row = ROWS - 1; row >= 0; row--) {
+    const isFull = board[row].every((cell) => cell !== 0);
+    if (isFull) {
+      board.splice(row, 1);
+      board.unshift(Array(COLS).fill(0));
+      clearedLines++;
+      row++;
+    }
+  }
+
+  if (clearedLines > 0) {
+    totalLinesCleared += clearedLines;
+    const lineClearPoints = {
+      1: 100,
+      2: 300,
+      3: 500,
+      4: 800,
+    };
+    score += (lineClearPoints[clearedLines] || 0) * level;
+    const newLevel = Math.floor(totalLinesCleared / 10) + 1;
+    if (newLevel !== level) {
+      level = newLevel;
+      dropInterval = Math.max(150, 1000 - (level - 1) * 80);
+      document.getElementById("level").textContent = level;
+    }
+    updateScore();
+  }
 }
 
-// Draw target pattern
-function drawTargetPattern() {
-  if (!targetPattern) return;
-
+// Draw the next piece preview in the side panel
+function drawNextPiecePreview() {
   const blockSize = 20;
   patternCtx.fillStyle = "#1e1e1e";
   patternCtx.fillRect(0, 0, patternCanvas.width, patternCanvas.height);
 
-  for (let row = 0; row < PATTERN_SIZE; row++) {
-    for (let col = 0; col < PATTERN_SIZE; col++) {
-      if (targetPattern.pattern[row][col]) {
-        patternCtx.fillStyle = "#f48771";
-        patternCtx.fillRect(col * blockSize, row * blockSize, blockSize, blockSize);
+  if (!nextPiece) return;
+
+  const pieceHeight = nextPiece.length;
+  const pieceWidth = nextPiece[0].length;
+  const offsetX = Math.floor((patternCanvas.width - pieceWidth * blockSize) / 2);
+  const offsetY = Math.floor((patternCanvas.height - pieceHeight * blockSize) / 2);
+
+  for (let row = 0; row < pieceHeight; row++) {
+    for (let col = 0; col < pieceWidth; col++) {
+      const colorCode = nextPiece[row][col];
+      if (colorCode) {
+        patternCtx.fillStyle = COLORS[colorCode];
+        patternCtx.fillRect(offsetX + col * blockSize, offsetY + row * blockSize, blockSize, blockSize);
         patternCtx.strokeStyle = "#3e3e42";
-        patternCtx.strokeRect(col * blockSize, row * blockSize, blockSize, blockSize);
+        patternCtx.strokeRect(offsetX + col * blockSize, offsetY + row * blockSize, blockSize, blockSize);
       }
-    }
-  }
-}
-
-// Check for pattern match
-function checkPatternMatch() {
-  for (let startRow = 0; startRow <= ROWS - PATTERN_SIZE; startRow++) {
-    for (let startCol = 0; startCol <= COLS - PATTERN_SIZE; startCol++) {
-      if (matchesPattern(startRow, startCol)) {
-        clearPattern(startRow, startCol);
-        score += 100;
-        patternsCleared++;
-        if (patternsCleared % 5 === 0) {
-          level++;
-          dropInterval = Math.max(200, 1000 - (level - 1) * 100);
-          document.getElementById("level").textContent = level;
-        }
-        updateScore();
-        setNewTargetPattern();
-        return;
-      }
-    }
-  }
-}
-
-// Check if pattern matches at position
-function matchesPattern(startRow, startCol) {
-  for (let row = 0; row < PATTERN_SIZE; row++) {
-    for (let col = 0; col < PATTERN_SIZE; col++) {
-      const cellValue = board[startRow + row][startCol + col];
-      // Void blocks (8) count as empty for pattern matching
-      const hasBlock = cellValue !== 0 && cellValue !== 8;
-      const needsBlock = targetPattern.pattern[row][col] === 1;
-
-      if (hasBlock !== needsBlock) {
-        return false;
-      }
-    }
-  }
-  return true;
-}
-
-// Clear matched pattern
-function clearPattern(startRow, startCol) {
-  // Clear all blocks on the board
-  for (let row = 0; row < ROWS; row++) {
-    for (let col = 0; col < COLS; col++) {
-      board[row][col] = 0;
     }
   }
 }
