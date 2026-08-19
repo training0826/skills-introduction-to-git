@@ -71,6 +71,24 @@
 
 ### 9) Validation performed during changes
 - Repeatedly checked for syntax/runtime issues in edited files.
+
+
+
+
+Prompts used: 
+
+Here’s the chronological list of prompts used in this chat to change the game, step by step:
+
+can you get the app running again - its starting but no blocks coming up its a tetris clone
+its working again - but completed lines are not deleted - they build up the stack
+yes please (this was for switching to classic Tetris line-clear scoring)
+please change thie void block behaviour - make them normal blocks and make them white
+add l-shaped blocks
+yes please (this was for adding the remaining classic tetrominoes: I, T, S, Z)
+now I understand the original idea - the target pattern was to achieve - not like real tetris - lets get rid of the target pattern and show the next element there instead
+If you want, I can also generate this as a clean changelog section you can paste into your README.
+
+
 - Confirmed no reported errors in:
   - `src/index.js`
   - `src/index.html`
